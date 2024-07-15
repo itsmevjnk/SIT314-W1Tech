@@ -5,9 +5,10 @@ import logging
 logging.basicConfig(format='%(asctime)s: %(message)s', level=logging.INFO, datefmt='%H:%M:%S')
 
 import threading
+import time
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.bind((config.HOST, config.PORT))
+server.bind(('0.0.0.0', config.PORT))
 server.listen(5)
 
 logging.info(f'server listening on {config.HOST}:{config.PORT}.')
@@ -19,6 +20,8 @@ class ConnHandler:
         self.name = str(conn.getsockname())
         logging.info(f'{self.name}: new connection')
 
+        conn.setblocking(False)
+
     def __del__(self):
         logging.info(f'{self.name}: destroying object')
         self.conn.close() # close connection - the handler will exit by itself (hopefully)
@@ -29,12 +32,17 @@ class ConnHandler:
 
     def handler(self):
         while True:
-            msg = self.conn.recv(2048).decode('utf-8')
+            try:
+                msg = self.conn.recv(2048).decode('utf-8')
+            except BlockingIOError:
+                time.sleep(0.001)
+                continue
             if len(msg) == 0:
+                # continue
                 logging.info(f'{self.name}: client disconnected')
                 return
             else:
-                logging.debug(f'{self.name}: received message: {msg}')
+                logging.info(f'{self.name}: received message: {msg}')
                 if msg == config.SERVER_DISCONNECT_MSG:
                     logging.info(f'{self.name}: requested disconnect')
                     self.conn.close()
@@ -50,7 +58,8 @@ def conn_loop():
 threading.Thread(target=conn_loop).run() # launch loop in a different thread so we can listen for Ctrl-C
 
 try:
-    while True: pass
+    while True:
+        pass
 finally:
     for h in handlers:
         del h
